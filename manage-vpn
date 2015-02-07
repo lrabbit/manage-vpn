@@ -1,0 +1,93 @@
+#!/bin/sh
+
+# http://pcsupport.about.com/od/tipstricks/a/free-public-dns-servers.htm
+GATEWAY="192.168.0.254"
+PUBLIC_DNS="209.244.0.3 209.244.0.4 8.8.8.8 8.8.4.4 84.200.69.80 84.200.70.40 8.26.56.26 8.20.247.20 \
+  208.67.222.222 208.67.220.220 156.154.70.1 156.154.71.1 199.85.126.10 199.85.127.10 81.218.119.11 \
+  209.88.198.133 195.46.39.39 195.46.39.40 107.150.40.234 50.116.23.211 208.76.50.50 208.76.51.51 \
+  216.146.35.35 216.146.36.36 37.235.1.174 37.235.1.177 89.233.43.71 91.239.100.100 74.82.42.42 \
+  109.69.8.51"
+PUBLIC_DNS="${PUBLIC_DNS} ${GATEWAY}"
+DESTINATION_HOST="1.2.3.4"
+HOST_TO_BLOCK="hostname"
+
+usage()
+{
+  echo "Usage: ${0} enable / disable / status"
+  exit 0
+}
+
+check_rules()
+{
+  iptables -t nat --list --line-numbers | grep ${HOST_TO_BLOCK} > /dev/null
+}
+
+enable_rules()
+{
+  check_rules
+  if [ $? -eq 0 ]
+  then
+    echo "VPN already enabled"
+  else
+    echo "Enabling VPN"
+    for IP in ${PUBLIC_DNS}
+    do
+      iptables -t nat -A PREROUTING -p tcp -s ${HOST_TO_BLOCK} -d ${IP} --dport 53 -j DNAT --to-destination ${DESTINATION_HOST}
+      iptables -t nat -A PREROUTING -p udp -s ${HOST_TO_BLOCK} -d ${IP} --dport 53 -j DNAT --to-destination ${DESTINATION_HOST}
+    done
+  fi
+}
+
+disable_rules()
+{
+  echo "Disabling VPN"
+
+  done=0
+  while  [ $done -ne 1 ]
+  do
+    num=`iptables -t nat --list --line-numbers | grep ${HOST_TO_BLOCK} | head -1 | awk '{ print $1; }'`
+    if [ $? -ne 0 ]
+    then
+      echo "An error occurred while listing the iptables rules"
+      exit 1
+    fi
+
+    if [ "x${num}" == "x" ]
+    then
+      done=1
+    else
+      iptables -t nat -D PREROUTING ${num}
+      if [ $? -ne 0 ]
+      then
+        echo "An error occurred while deleting a rule"
+        exit 2
+      fi
+    fi
+  done
+}
+
+if [ "x${1}" == "x" ]
+then
+  usage
+fi
+
+if [ "${1}" != "enable" ] && [ "${1}" != "disable" ] && [ "${1}" != "status" ]
+then
+  usage
+fi
+
+if [ "${1}" == "enable" ]
+then
+  enable_rules
+elif [ "${1}" == "disable" ]
+then
+  disable_rules
+else
+  check_rules
+  if [ $? -eq 0 ]
+  then
+    echo "VPN is enabled"
+  else
+    echo "VPN is not enabled"
+  fi
+fi
